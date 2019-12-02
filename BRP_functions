@@ -1,0 +1,75 @@
+mort.dynamic <- function(age,year,natural_mortality,fishing_mortality, max_age)
+{
+  # natural_mortality - matrix dim:n_age, n_year
+  # age               - int
+  # year               - int
+  curr_sum = 0
+  for(a_prime in 1:age){
+    curr_sum = curr_sum + fishing_mortality+natural_mortality[(year-1)-age+a_prime,a_prime]
+  }
+  return(curr_sum)
+}
+
+SBPR.dynamic <- function(fishing_mortality, natural_mortality, weight_at_age, maturity, max_age, year,numbers)
+{
+  # Arguments
+  # fishing_mortality - vector dim:n_age
+  # natural_mortality - matrix dim:n_age, n_year
+  # weight_at_age     - vector dim:n_age
+  # maturity          - vector dim:n_age
+  # max_age           - int
+  # year              - int
+  #numbers            - matrix dim:n_age,n_year
+  
+  Spawn_biomass_per_recruit_younger_ages <- 0 
+  Spawn_biomass_per_recruit_plus_group <- 0
+  Spawn_biomass_per_recruit <- 0
+  
+  numbers_per_recruit_younger_ages <- numbers[year-1,1]
+  numbers_per_recruit_plus_group <- 0
+  numbers_per_recruit <- 0
+  
+  for(a in 2:(max_age-1)){
+    Spawn_biomass_per_recruit_younger_ages <- Spawn_biomass_per_recruit_younger_ages + weight_at_age[a] * maturity[a]*exp(-mort.dynamic(a-1,year,natural_mortality,fishing_mortality,max_age = 8))
+    numbers_per_recruit_younger_ages <- numbers_per_recruit_younger_ages + numbers[year-1,a-1]*weight_at_age[a] * maturity[a]*exp(-mort.dynamic(a-1,year,natural_mortality,fishing_mortality,max_age = 8))
+  }
+  Spawn_biomass_per_recruit_plus_group <- Spawn_biomass_per_recruit_plus_group + weight_at_age[max_age] * maturity[max_age] *((exp(-mort.dynamic(max_age-1,year,natural_mortality,fishing_mortality,max_age = 8))) + (exp(-mort.dynamic(max_age,year,natural_mortality,fishing_mortality,max_age = 8))))
+  numbers_per_recruit_plus_group <- numbers_per_recruit_plus_group + weight_at_age[max_age] * maturity[max_age]*((numbers[year-1,max_age-1] *(exp(-mort.dynamic(max_age-1,year,natural_mortality,fishing_mortality,max_age = 8)))) + (numbers[year-1,max_age]*exp(-mort.dynamic(max_age,year,natural_mortality,fishing_mortality,max_age = 8))))
+  
+  Spawn_biomass_per_recruit <-  Spawn_biomass_per_recruit_younger_ages + Spawn_biomass_per_recruit_plus_group
+  numbers_per_recruit <- 0.5*(numbers_per_recruit_younger_ages + numbers_per_recruit_plus_group)
+  
+  return(list("SBPR" = Spawn_biomass_per_recruit, "fishing" = fishing_mortality, "NPR" = numbers_per_recruit))
+}
+
+
+SBPR.conditional <- function(fishing_mortality, natural_mortality, weight_at_age, maturity, max_age,numbers)
+{
+  # Arguments
+  # fishing_mortality - vector dim:n_age
+  # natural_mortality - vector dim:n_age
+  # weight_at_age     - vector dim:n_age
+  # maturity          - vector dim:n_age
+  # max_age           - int
+  
+  
+  survival <- 1
+  Spawn_biomass_per_recruit <- 0
+  numbers_per_recruit <- 0
+  
+  total_fishing <- fishing_mortality     #fishing mortality from 0 to 2 by 0.1
+  mortality <- total_fishing + natural_mortality   
+  
+  
+  for(i in 2:max_age)
+  {
+    if(i == max_age){
+      survival <- survival / (1-exp(-mortality[max_age]))
+    }
+    
+    Spawn_biomass_per_recruit <- Spawn_biomass_per_recruit + weight_at_age[i] * maturity[i] * survival * exp(-mortality[i-1])
+    numbers_per_recruit <- numbers_per_recruit + 0.5*(numbers[i-1]*weight_at_age[i] * maturity[i] * survival * exp(-mortality[i-1]))
+    survival <- survival * exp(-mortality[i-1])
+  }
+  return(list("SBPR" = Spawn_biomass_per_recruit, "fishing" = fishing_mortality,"NPR" = numbers_per_recruit))
+}
